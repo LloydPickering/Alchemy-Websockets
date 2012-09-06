@@ -1,5 +1,9 @@
 ﻿using System;
+using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -30,6 +34,15 @@ namespace Alchemy
         private readonly int _port;
         private readonly string _host;
 
+        /// <summary>
+        /// Configuration for TLS (wss://)
+        /// _tls : Should we use TLS
+        /// </summary>
+        
+        private Boolean _tls = false;
+        public Boolean IsWss { get { return _tls; } }
+        private Boolean _AllowUnverifiedCerts = false;
+
         public enum ReadyStates
         {
             CONNECTING,
@@ -46,11 +59,13 @@ namespace Alchemy
             }
         }
 
-        public WebSocketClient(string path)
+        public WebSocketClient(string path, bool AllowUnverifiedWssCerts=false)
         {
+            _AllowUnverifiedCerts = AllowUnverifiedWssCerts;
+
             var r = new Regex("^(wss?)://(.*)\\:([0-9]*)/(.*)$");
             var matches = r.Match(path);
-
+            if (path.Contains("wss://")) _tls = true;
             _host = matches.Groups[2].Value;
             _port = Int32.Parse(matches.Groups[3].Value);
             _path = matches.Groups[4].Value;
@@ -100,6 +115,23 @@ namespace Alchemy
 
             using (_context = new Context(null, _client))
             {
+                if (_tls)
+                {
+                    _context.SslStream = new SslStream(_client.GetStream(), false, ValidateRemoteCertificate);
+                    try
+                    {
+                        _context.SslStream.AuthenticateAsClient(_host);
+                    }
+                    catch (AuthenticationException)
+                    {
+                        _context.SslStream.Close();
+                        _context.SslStream = null;
+                        _client.Close();
+                        _client = null;
+                        return;
+                    }
+                }
+
                 _context.BufferSize = 512;
                 _context.UserContext.DataFrame = new DataFrame();
                 _context.UserContext.SetOnConnect(OnConnect);
@@ -116,7 +148,14 @@ namespace Alchemy
 
                     try
                     {
-                        _context.Connection.Client.BeginReceive(_context.Buffer, 0, _context.Buffer.Length, SocketFlags.None, DoReceive, _context);
+                        if (_context.SslStream != null)
+                        {
+                            _context.SslStream.BeginRead(_context.Buffer, 0, _context.Buffer.Length, DoReceive, _context);
+                        }
+                        else
+                        {
+                            _context.Connection.Client.BeginReceive(_context.Buffer, 0, _context.Buffer.Length, SocketFlags.None, DoReceive, _context);
+                        }
                     }
                     catch (Exception)
                     {
@@ -182,7 +221,14 @@ namespace Alchemy
 
             try
             {
-                context.ReceivedByteCount = context.Connection.Client.EndReceive(result);
+                if (IsWss && context.SslStream != null)
+                {
+                    context.ReceivedByteCount = context.SslStream.EndRead(result);
+                }
+                else
+                {
+                    context.ReceivedByteCount = context.Connection.Client.EndReceive(result);
+                }
             }
             catch (Exception)
             {
@@ -240,6 +286,19 @@ namespace Alchemy
         public void Send(byte[] data)
         {
             _context.UserContext.Send(data);
+        }
+
+        private bool ValidateRemoteCertificate(object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors policyErrors)
+        {
+            if (_AllowUnverifiedCerts)
+            {
+                // allow any old dodgy certificate...
+                return true;
+            }
+            else
+            {
+                return policyErrors == SslPolicyErrors.None;
+            }
         }
     }
 }

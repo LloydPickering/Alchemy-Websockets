@@ -64,7 +64,7 @@ namespace Alchemy.Handlers
             if (data == "<policy-file-request/>\0")
             {
                 //if it is, we access the Access Policy Server instance to send the appropriate response.
-                context.Server.AccessPolicyServer.SendResponse(context.Connection);
+                WebSocketServer.AccessPolicyServer.SendResponse(context.Connection);
                 context.Disconnect();
             }
             else //If it isn't, process http/websocket header as normal.
@@ -115,9 +115,29 @@ namespace Alchemy.Handlers
                 try
                 {
                     List<ArraySegment<byte>> data = raw ? dataFrame.AsRaw() : dataFrame.AsFrame();
-                    context.Connection.Client.BeginSend(data, SocketFlags.None,
+
+                    if (context.SslStream !=null)
+                    {
+                        //copy array segments into a byte[] - not happy with this 
+                        //Todo look at whether this is valid
+                        Int32 len = 0, offset = 0; ;
+                        foreach (ArraySegment<Byte> b in data)
+                            len += b.Count;
+                        byte[] bdata = new byte[len];
+                        foreach (ArraySegment<Byte> b in data)
+                        {
+                            b.Array.CopyTo(bdata, offset);
+                            offset += b.Count;
+                        }
+
+                        context.SslStream.BeginWrite(bdata, 0, bdata.Length, callback, context);
+                    }
+                    else
+                    {
+                        context.Connection.Client.BeginSend(data, SocketFlags.None,
                                                         callback,
                                                         context);
+                    }
                 }
                 catch
                 {
@@ -135,7 +155,14 @@ namespace Alchemy.Handlers
             var context = (Context) result.AsyncState;
             try
             {
-                context.Connection.Client.EndSend(result);
+                if (context.SslStream != null)
+                {
+                    context.SslStream.EndWrite(result);
+                }
+                else
+                {
+                    context.Connection.Client.EndSend(result);
+                }
                 context.SendReady.Release();
             }
             catch

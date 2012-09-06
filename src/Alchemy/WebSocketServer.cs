@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography.X509Certificates;
 using Alchemy.Classes;
 using Alchemy.Handlers;
 
@@ -17,7 +20,7 @@ namespace Alchemy
         /// This is the Flash Access Policy Server. It allows us to facilitate flash socket connections much more quickly in most cases.
         /// Don't mess with it through here. It's only public so we can access it later from all the IOCPs.
         /// </summary>
-        internal AccessPolicyServer AccessPolicyServer;
+        internal static AccessPolicyServer AccessPolicyServer;
 
         /// <summary>
         /// These are the default OnEvent delegates for the server. By default, all new UserContexts will use these events.
@@ -48,9 +51,26 @@ namespace Alchemy
         private string _origin = String.Empty;
 
         /// <summary>
+        /// Configuration for TLS (wss://)
+        /// _tls : Should we use TLS
+        /// _certificate : The x509 cert of the server
+        /// </summary>
+        private Boolean _tls = false;
+        private X509Certificate _certificate = null;
+        public bool IsWss { get { return _tls; } }
+
+        /// <summary>
         /// Initializes a new instance of the <see cref="WebSocketServer"/> class.
         /// </summary>
-        public WebSocketServer(int listenPort = 0, IPAddress listenAddress = null) : base(listenPort, listenAddress) {}
+        public WebSocketServer(int listenPort = 0, IPAddress listenAddress = null, Boolean tls = false, X509Certificate tlscert = null) : base(listenPort, listenAddress) 
+        {
+            _tls = tls;
+
+            if (tlscert != null)
+            {
+                _certificate = tlscert;
+            }
+        }
 
         /// <summary>
         /// Gets or sets the origin host.
@@ -121,8 +141,26 @@ namespace Alchemy
         protected override void OnRunClient(object data)
         {
             var connection = (TcpClient)data;
+
             using (var context = new Context(this, connection))
             {
+
+                if (_tls)
+                {
+                    context.SslStream = new SslStream(connection.GetStream(), false);
+                    try
+                    {
+                        context.SslStream.AuthenticateAsServer(_certificate, false, SslProtocols.Tls, true);
+                    } catch (AuthenticationException) {
+                        context.SslStream.Close();
+                        context.SslStream = null;
+                        connection.Close();
+                        connection = null;
+                        return;
+                    }
+                }
+
+            
                 context.UserContext.ClientAddress = context.Connection.Client.RemoteEndPoint;
                 context.UserContext.SetOnConnect(OnConnect);
                 context.UserContext.SetOnConnected(OnConnected);
@@ -137,8 +175,15 @@ namespace Alchemy
                     {
                         try
                         {
-                            context.Connection.Client.BeginReceive(context.Buffer, 0, context.Buffer.Length,
-                                                                   SocketFlags.None, DoReceive, context);
+                            if (_tls)
+                            {
+                                context.SslStream.BeginRead(context.Buffer, 0, context.Buffer.Length, DoTcpReceive, context);
+                            }
+                            else
+                            {
+                                context.Connection.Client.BeginReceive(context.Buffer, 0, context.Buffer.Length,
+                                                                   SocketFlags.None, DoTcpReceive, context);
+                            }
                         }
                         catch (SocketException)
                         {
@@ -152,24 +197,34 @@ namespace Alchemy
                 }
             }
         }
-
-        /// <summary>
-        /// The root receive event for each client. Executes in it's own thread.
-        /// </summary>
-        /// <param name="result">The Async result.</param>
-        private void DoReceive(IAsyncResult result)
+        private void DoTcpReceive(IAsyncResult result)
         {
             var context = (Context) result.AsyncState;
             context.Reset();
             try
             {
-                context.ReceivedByteCount = context.Connection.Client.EndReceive(result);
+                if (context.Server._tls)
+                {
+                    context.ReceivedByteCount = context.SslStream.EndRead(result);
+                }
+                else
+                {
+                    context.ReceivedByteCount = context.Connection.Client.EndReceive(result);
+                }
             }
             catch
             {
                 context.ReceivedByteCount = 0;
             }
+            DoReceive(context);
+        }
 
+        /// <summary>
+        /// The root receive event for each client. Executes in it's own thread.
+        /// </summary>
+        /// <param name="result">The result.</param>
+        private void DoReceive(Context context)
+        {
             if (context.ReceivedByteCount > 0)
             {
                 context.Handler.HandleRequest(context);

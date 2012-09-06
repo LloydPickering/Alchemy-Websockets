@@ -133,5 +133,10 @@ namespace Alchemy.Classes
             }
             ReceivedByteCount = 0;
         }
+
+        /// <summary>
+        /// SslStream object - if non null, we are using Wss
+        /// </summary>
+        public System.Net.Security.SslStream SslStream { get; set; }
     }
 }
