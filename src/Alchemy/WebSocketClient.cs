@@ -37,6 +37,7 @@ namespace Alchemy
         /// <summary>
         /// Configuration for TLS (wss://)
         /// _tls : Should we use TLS
+        /// _AllowUnverifiedCerts : Should we allow server SSL certificates which are invalid? (useful for testing)
         /// </summary>
         
         private Boolean _tls = false;

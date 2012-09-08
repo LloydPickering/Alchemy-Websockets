@@ -6,6 +6,7 @@ using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using Alchemy.Classes;
 using Alchemy.Handlers;
+using System.Threading;
 
 namespace Alchemy
 {
@@ -147,7 +148,7 @@ namespace Alchemy
 
                 if (_tls)
                 {
-                    context.SslStream = new SslStream(connection.GetStream(), false);
+                    context.SslStream = new SslStream(context.Connection.GetStream());
                     try
                     {
                         context.SslStream.AuthenticateAsServer(_certificate, false, SslProtocols.Tls, true);
@@ -169,6 +170,7 @@ namespace Alchemy
                 context.UserContext.SetOnReceive(OnReceive);
                 context.BufferSize = BufferSize;
                 context.UserContext.OnConnect();
+
                 while (context.Connected)
                 {
                     if (context.ReceiveReady.Wait(TimeOut))
@@ -206,6 +208,7 @@ namespace Alchemy
                 if (context.Server._tls)
                 {
                     context.ReceivedByteCount = context.SslStream.EndRead(result);
+                    //context.ReceivedByteCount += context.SslStream.Read(context.Buffer, 1, context.Buffer.Length - 1);
                 }
                 else
                 {

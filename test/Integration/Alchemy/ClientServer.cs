@@ -17,32 +17,27 @@ namespace Alchemy
         private WebSocketClient _wssclient;
         private bool _forever;
         private bool _clientDataPass = true;
+        private Int32 serverport;
+        private Int32 wssserverport;
 
         [TestFixtureSetUp]
         public void SetUp()
         {
-            _server = new WebSocketServer(54321, IPAddress.Loopback) { OnReceive = OnServerReceive };
+            //setup for Ws://
+            serverport = 54321;
+            _server = new WebSocketServer(serverport, IPAddress.Loopback) { OnReceive = OnServerReceive };
             _server.Start();
-            _client = new WebSocketClient("ws://127.0.0.1:54321/path") { Origin = "localhost", OnReceive = OnClientReceive };
+            _client = new WebSocketClient(String.Format("ws://127.0.0.1:{0}/path", serverport)) { Origin = "localhost", OnReceive = OnClientReceive };
             _client.Connect();
 
-            System.Security.Cryptography.X509Certificates.X509Certificate cert = null;
-            X509Store store = new X509Store("My");
-            store.Open(OpenFlags.ReadOnly);
-            if (store.Certificates.Count > 0)
-            {
-                cert = store.Certificates[0];
-            }
-            else
-            {
-                throw new Exception("No certificates found for WSS Testing");
-            }
 
-            //System.Security.Cryptography.X509Certificates.X509Certificate cert = System.Security.Cryptography.X509Certificates.X509Certificate.CreateFromCertFile("dummycert.cer");
+            //Setup for Wss://
+            wssserverport = 54320;
+            X509Certificate cert = GetCert();
 
-            _wssserver = new WebSocketServer(54320, IPAddress.Loopback, tls:true, tlscert: cert) { OnReceive = OnServerReceive };
+            _wssserver = new WebSocketServer(wssserverport, IPAddress.Loopback, tls:true, tlscert: cert) { OnReceive = OnServerReceive };
             _wssserver.Start();
-            _wssclient = new WebSocketClient("wss://127.0.0.1:54320/path", AllowUnverifiedWssCerts:true) { Origin = "localhost", OnReceive = OnClientReceive };
+            _wssclient = new WebSocketClient(String.Format("wss://127.0.0.1:{0}/path", wssserverport), AllowUnverifiedWssCerts: true) { Origin = "localhost", OnReceive = OnClientReceive };
             _wssclient.Connect();
         }
 
@@ -58,6 +53,42 @@ namespace Alchemy
             _wssserver.Stop();
             _wssclient = null;
             _wssserver = null;
+        }
+
+        private static X509Certificate GetCert()
+        {
+            System.Security.Cryptography.X509Certificates.X509Certificate cert = null;
+
+            //Try to get cert from file
+            cert = X509Certificate.CreateFromCertFile("dummycert.cer");
+
+            if (cert == null)
+            {
+                X509Store store = new X509Store("My");
+                store.Open(OpenFlags.ReadOnly);
+
+                //Try to find a valid cert for localhost in Store
+                foreach (X509Certificate c in store.Certificates)
+                {
+                    if (c.Subject == "localhost")
+                    {
+                        cert = c;
+                    }
+                }
+
+                //no localhost cert, so try picking the first one in the store
+                if (store.Certificates.Count > 0 && cert == null)
+                {
+                    cert = store.Certificates[0];
+                }
+
+                //if we still dont have a cert - die
+                if (cert == null)
+                {
+                    throw new Exception("No certificates found for WSS Testing. Please create one. To do so, see http://compilewith.net/2007/12/creating-test-x509-certificates.html");
+                }
+            }
+            return cert;
         }
 
         private static void OnServerReceive(UserContext context)
@@ -122,7 +153,7 @@ namespace Alchemy
             _forever = true;
             if (_client.Connected)
             {
-                var client2 = new WebSocketClient("ws://127.0.0.1:54321/path") { OnReceive = OnClientReceive };
+                var client2 = new WebSocketClient(String.Format("ws://127.0.0.1:{0}/path", serverport)) { OnReceive = OnClientReceive };
                 client2.Connect();
 
                 if (client2.Connected)
@@ -148,7 +179,7 @@ namespace Alchemy
             _forever = true;
             if (_wssclient.Connected)
             {
-                var client2 = new WebSocketClient("wss://127.0.0.1:54320/path", AllowUnverifiedWssCerts:true) { OnReceive = OnClientReceive };
+                var client2 = new WebSocketClient(String.Format("wss://127.0.0.1:{0}/path", wssserverport), AllowUnverifiedWssCerts: true) { OnReceive = OnClientReceive };
                 client2.Connect();
 
                 if (client2.Connected)
