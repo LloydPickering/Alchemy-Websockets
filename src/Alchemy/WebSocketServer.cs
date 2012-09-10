@@ -191,6 +191,10 @@ namespace Alchemy
                         {
                             break;
                         }
+                        catch (System.IO.IOException) //this normally hits when a firefox client hits a server with an invalid SSL certificate, and forces socket closed
+                        {
+                            break;
+                        }
                     }
                     else
                     {
@@ -208,7 +212,9 @@ namespace Alchemy
                 if (context.Server._tls)
                 {
                     context.ReceivedByteCount = context.SslStream.EndRead(result);
-                    //context.ReceivedByteCount += context.SslStream.Read(context.Buffer, 1, context.Buffer.Length - 1);
+                    //for some reason in chrome, we only read the 1st byte, so pull in the rest synchronously
+                    if(context.ReceivedByteCount==1)
+                        context.ReceivedByteCount += context.SslStream.Read(context.Buffer, 1, context.Buffer.Length - 1);
                 }
                 else
                 {
