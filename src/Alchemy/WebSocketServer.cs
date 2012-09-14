@@ -143,16 +143,22 @@ namespace Alchemy
         {
             var connection = (TcpClient)data;
 
+            OnRunTcp(connection);
+        }
+        
+        private void OnRunTcp(TcpClient connection)
+        {
             using (var context = new Context(this, connection))
             {
-
                 if (_tls)
                 {
                     context.SslStream = new SslStream(context.Connection.GetStream());
                     try
                     {
                         context.SslStream.AuthenticateAsServer(_certificate, false, SslProtocols.Tls, true);
-                    } catch (AuthenticationException) {
+                    }
+                    catch (AuthenticationException)
+                    {
                         context.SslStream.Close();
                         context.SslStream = null;
                         connection.Close();
@@ -161,7 +167,6 @@ namespace Alchemy
                     }
                 }
 
-            
                 context.UserContext.ClientAddress = context.Connection.Client.RemoteEndPoint;
                 context.UserContext.SetOnConnect(OnConnect);
                 context.UserContext.SetOnConnected(OnConnected);
@@ -183,8 +188,7 @@ namespace Alchemy
                             }
                             else
                             {
-                                context.Connection.Client.BeginReceive(context.Buffer, 0, context.Buffer.Length,
-                                                                   SocketFlags.None, DoTcpReceive, context);
+                                context.Connection.Client.BeginReceive(context.Buffer, 0, context.Buffer.Length, SocketFlags.None, DoTcpReceive, context);
                             }
                         }
                         catch (SocketException)
@@ -203,17 +207,18 @@ namespace Alchemy
                 }
             }
         }
+
         private void DoTcpReceive(IAsyncResult result)
         {
             var context = (Context) result.AsyncState;
             context.Reset();
             try
             {
-                if (context.Server._tls)
+                if (_tls)
                 {
                     context.ReceivedByteCount = context.SslStream.EndRead(result);
                     //for some reason in chrome, we only read the 1st byte, so pull in the rest synchronously
-                    if(context.ReceivedByteCount==1)
+                    if (context.ReceivedByteCount == 1)
                         context.ReceivedByteCount += context.SslStream.Read(context.Buffer, 1, context.Buffer.Length - 1);
                 }
                 else
@@ -236,13 +241,26 @@ namespace Alchemy
         {
             if (context.ReceivedByteCount > 0)
             {
-                context.Handler.HandleRequest(context);
+                if (!context.IsSetup && context.ReceivedByteCount == context.BufferSize) //if we might have a header which is larger than buffer, store it and wait
+                {
+                    byte[] temp = new byte[context.ReceivedByteCount];
+                    Array.Copy(context.Buffer, temp, context.ReceivedByteCount);
+                    context.HeaderStorage.Add(temp);
+                }
+                else
+                {
+                    context.Handler.HandleRequest(context);
+                }
                 context.ReceiveReady.Release();
             }
             else
             {
                 context.Disconnect();
                 context.ReceiveReady.Release();
+                if (_tls)
+                {
+                    context.Dispose();
+                }
             }
         }
     }

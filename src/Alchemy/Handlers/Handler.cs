@@ -59,7 +59,31 @@ namespace Alchemy.Handlers
         /// <param name="context">The user context.</param>
         public void ProcessHeader(Context context)
         {
-            string data = Encoding.UTF8.GetString(context.Buffer, 0, context.ReceivedByteCount);
+            string data;
+
+            //if we have stored header data because of a full buffer
+            if (context.HeaderStorage.Count > 0)
+            {
+                //not the most efficient code, but only called once per client on connect
+                int length = context.ReceivedByteCount;
+                foreach (byte[] b in context.HeaderStorage)
+                    length += b.Length;
+
+                byte[] newheader = new byte[length];
+                int startpoint = 0;
+                foreach (byte[] b in context.HeaderStorage)
+                {
+                    Array.Copy(b, 0, newheader, startpoint, b.Length);
+                    startpoint += b.Length;
+                }
+                Array.Copy(context.Buffer, 0, newheader, startpoint, context.ReceivedByteCount);
+                data = Encoding.UTF8.GetString(newheader);
+                context.HeaderStorage = new List<byte[]>();
+            }
+            else
+            {
+                data = Encoding.UTF8.GetString(context.Buffer, 0, context.ReceivedByteCount);
+            }
             //Check first to see if this is a flash socket XML request.
             if (data == "<policy-file-request/>\0")
             {

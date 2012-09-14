@@ -32,7 +32,6 @@ namespace Alchemy.Handlers
             {
                 context.UserContext.Protocol = context.Header.Protocol;
                 context.UserContext.RequestPath = context.Header.RequestPath;
-                context.Header = null;
                 context.IsSetup = true;
                 context.UserContext.OnConnected();
             }

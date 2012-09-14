@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net.Sockets;
 using System.Threading;
+using System.Web;
 using Alchemy.Handlers;
 using Alchemy.Handlers.WebSocket;
 
@@ -20,6 +22,11 @@ namespace Alchemy.Classes
         /// The buffer used for accepting raw data from the socket.
         /// </summary>
         public byte[] Buffer;
+
+        /// <summary>
+        /// Temporary storage for when our header is larger than bufferlength
+        /// </summary>
+        public List<Byte[]> HeaderStorage = new List<byte[]>();
 
         /// <summary>
         /// Whether or not the TCPClient is still connected.
