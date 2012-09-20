@@ -72,11 +72,15 @@ namespace Alchemy.Handlers.WebSocket.hybi10
 
         private void Mask()
         {
-            foreach (var t in Payload)
+            try
             {
-                Mask(t.Array);
+                foreach (var t in Payload)
+                {
+                    Mask(t.Array);
+                }
+                _header.CurrentMaskIndex = 0;
             }
-            _header.CurrentMaskIndex = 0;
+            catch (Exception){ }
         }
 
 

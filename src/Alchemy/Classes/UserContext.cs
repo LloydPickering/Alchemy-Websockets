@@ -22,12 +22,14 @@ namespace Alchemy.Classes
         /// <summary>
         /// User defined data. Can be anything.
         /// </summary>
-        public Object Data;
+        public Object Data { get { lock (_data) { return _data; } } set { if (_data != null) { lock (_data) { _data = value; } } else { _data = value; } } }
+        private Object _data;
 
         /// <summary>
         /// The data Frame that this client is currently processing.
         /// </summary>
-        public DataFrame DataFrame;
+        public DataFrame DataFrame { get { lock (_dataFrame) { return _dataFrame; } } set { if (_dataFrame != null) { lock (_dataFrame) { _dataFrame = value; } } else { _dataFrame = value; } } }
+        private DataFrame _dataFrame;
 
         /// <summary>
         /// OnEvent Delegates specific to this connection.

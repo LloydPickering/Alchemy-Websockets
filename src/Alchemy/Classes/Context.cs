@@ -21,7 +21,8 @@ namespace Alchemy.Classes
         /// <summary>
         /// The buffer used for accepting raw data from the socket.
         /// </summary>
-        public byte[] Buffer;
+        public byte[] Buffer { get { lock (_buffer) { return _buffer; } } set { if (_buffer != null) { lock (_buffer) { _buffer = value; } } else _buffer = value; } }
+        private byte[] _buffer;
 
         /// <summary>
         /// Temporary storage for when our header is larger than bufferlength
@@ -84,7 +85,10 @@ namespace Alchemy.Classes
         {
             Server = server;
             Connection = connection;
-            Buffer = new byte[_bufferSize];
+            lock (_buffer)
+            {
+                _buffer = new byte[_bufferSize];
+            }
             UserContext = new UserContext(this) {ClientAddress = connection.Client.RemoteEndPoint};
         }
 
@@ -100,7 +104,10 @@ namespace Alchemy.Classes
             set
             {
                 _bufferSize = value;
-                Buffer = new byte[_bufferSize];
+                lock (_buffer)
+                {
+                    _buffer = new byte[_bufferSize];
+                }
             }
         }
 

@@ -60,9 +60,17 @@ namespace Alchemy.Handlers.WebSocket
         {
             get
             {
-                return Payload.Aggregate<ArraySegment<byte>, ulong>(0,
-                                                                    (current, seg) =>
-                                                                    current + Convert.ToUInt64(seg.Count));
+                for (int i = 0; i < 10; i++) //try up to 10 times
+                {
+                    try
+                    {
+                        return Payload.Aggregate<ArraySegment<byte>, ulong>(0,
+                                                                            (current, seg) =>
+                                                                            current + Convert.ToUInt64(seg.Count));
+                    }
+                    catch { }
+                }
+                return 0;
             }
         }
 
